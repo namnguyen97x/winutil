@@ -68,6 +68,7 @@ function Microwin-RemovePackages {
             }
         }
 
+        $counter = 0
         if ($UseCmdlets) {
             $failedCount = 0
 
@@ -75,8 +76,9 @@ function Microwin-RemovePackages {
 
             foreach ($pkg in $pkglist) {
                 try {
+                    $counter++
                     $status = "Removing $pkg"
-                    Write-Progress -Activity "Removing Packages" -Status $status -PercentComplete ($counter++/$pkglist.Count*100)
+                    Write-Progress -Activity "Removing Packages" -Status $status -PercentComplete ($counter/$pkglist.Count*100)
                     Remove-WindowsPackage -Path "$scratchDir" -PackageName $pkg -NoRestart -ErrorAction SilentlyContinue
                 } catch {
                     # This can happen if the package that is being removed is a permanent one
@@ -87,8 +89,9 @@ function Microwin-RemovePackages {
             }
         } else {
             foreach ($package in $pkgList) {
+                $counter++
                 $status = "Removing package $package"
-                Write-Progress -Activity "Removing Packages" -Status $status -PercentComplete ($counter++/$pkglist.Count*100)
+                Write-Progress -Activity "Removing Packages" -Status $status -PercentComplete ($counter/$pkglist.Count*100)
                 Write-Debug "Removing package $package"
                 dism /english /image="$scratchDir" /remove-package /packagename=$package /quiet /norestart | Out-Null
                 if ($? -eq $false) {

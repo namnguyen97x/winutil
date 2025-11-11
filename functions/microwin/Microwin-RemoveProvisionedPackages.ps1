@@ -66,8 +66,9 @@ function Microwin-RemoveProvisionedPackages() {
         $counter = 0
         if ($UseCmdlets) {
             foreach ($appx in $appxProvisionedPackages) {
+                $counter++
                 $status = "Removing Provisioned $($appx.PackageName)"
-                Write-Progress -Activity "Removing Provisioned Apps" -Status $status -PercentComplete ($counter++/$appxProvisionedPackages.Count*100)
+                Write-Progress -Activity "Removing Provisioned Apps" -Status $status -PercentComplete ($counter/$appxProvisionedPackages.Count*100)
                 try {
                     Remove-AppxProvisionedPackage -Path "$scratchDir" -PackageName $appx.PackageName -ErrorAction SilentlyContinue
                 } catch {
@@ -77,8 +78,9 @@ function Microwin-RemoveProvisionedPackages() {
             }
         } else {
             foreach ($appx in $appxProvisionedPackages) {
+                $counter++
                 $status = "Removing Provisioned $appx"
-                Write-Progress -Activity "Removing Provisioned Apps" -Status $status -PercentComplete ($counter++/$appxProvisionedPackages.Count*100)
+                Write-Progress -Activity "Removing Provisioned Apps" -Status $status -PercentComplete ($counter/$appxProvisionedPackages.Count*100)
                 dism /english /image="$scratchDir" /remove-provisionedappxpackage /packagename=$appx /quiet /norestart | Out-Null
                 if ($? -eq $false) {
                     Write-Host "AppX package $appx could not be removed."
