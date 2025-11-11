@@ -6,9 +6,6 @@ on:
       iso_url:
         description: Direct download URL for the Windows ISO to customize
         required: true
-      image_index:
-        description: Optional Windows image index (overrides edition selection)
-        required: false
       preferred_edition:
         description: Edition name to prefer when selecting an image index
         required: false
@@ -46,9 +43,10 @@ jobs:
             UseEsd = [System.Convert]::ToBoolean('${{ github.event.inputs.use_esd }}')
           }
 
-          if ('${{ github.event.inputs.image_index }}') {
-            $params.ImageIndex = [int]'${{ github.event.inputs.image_index }}'
-          }
+          # Do not accept an explicit image index from the workflow UI.
+          # Let the headless script select the image based on PreferredEdition
+          # (defaults to 'Professional') and fall back to the first index if
+          # there's no exact edition match.
 
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'tools\Invoke-MicrowinHeadless.ps1'
           & $scriptPath @params
