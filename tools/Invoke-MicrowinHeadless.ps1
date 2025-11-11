@@ -260,15 +260,19 @@ if (-not $images) {
     throw "No images were found inside $wimSource."
 }
 
+Write-Host "Available images:"
+$images | ForEach-Object { Write-Host "  Index: $($_.ImageIndex), Name: $($_.ImageName)" }
+
 if ($PSBoundParameters.ContainsKey('ImageIndex')) {
     $selectedImage = $images | Where-Object { $_.ImageIndex -eq $ImageIndex } | Select-Object -First 1
     if (-not $selectedImage) {
         throw "Image index $ImageIndex was not found. Available indexes: $($images.ImageIndex -join ', ')."
     }
 } else {
-    $selectedImage = $images | Where-Object { $_.EditionId -eq $PreferredEdition } | Select-Object -First 1
+    # Try to match PreferredEdition via ImageName (supports both old EditionId and new naming schemes)
+    $selectedImage = $images | Where-Object { $_.ImageName -like "*$PreferredEdition*" } | Select-Object -First 1
     if (-not $selectedImage) {
-        Write-Warning "Edition '$PreferredEdition' was not found. Falling back to the first image index."
+        Write-Warning "Edition '$PreferredEdition' was not found in ImageName. Falling back to the first image."
         $selectedImage = $images | Select-Object -First 1
     }
 }
