@@ -27,9 +27,11 @@ function Copy-Files {
         $files = Get-ChildItem -Path $path -Recurse:$recurse
         Write-Host "Copy $($files.Count) file(s) from $path to $destination"
 
+        $counter = 0
         foreach ($file in $files) {
+            $counter++
             $status = "Copying file {0} of {1}: {2}" -f $counter, $files.Count, $file.Name
-            Write-Progress -Activity "Copy disc image files" -Status $status -PercentComplete ($counter++/$files.count*100)
+            Write-Progress -Activity "Copy disc image files" -Status $status -PercentComplete ($counter/$files.count*100)
             $restpath = $file.FullName -Replace $path, ''
 
             if ($file.PSIsContainer -eq $true) {
