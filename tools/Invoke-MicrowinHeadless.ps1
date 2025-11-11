@@ -124,7 +124,41 @@ function Get-LocalIsoPath {
     if ($Source -match '^(http|https)://') {
         $targetIso = Join-Path $DestinationFolder "source.iso"
         Write-Host "Downloading ISO from $Source ..."
-        Invoke-WebRequest -Uri $Source -OutFile $targetIso
+
+        # If aria2c is available, prefer it for high-speed, multi-connection
+        # downloads. Use a large split count and enable continue so partial
+        # downloads resume on retries. If aria2c is not found, fall back to
+        # Invoke-WebRequest.
+        $aria2 = Get-Command aria2c -ErrorAction SilentlyContinue
+        if ($aria2) {
+            Write-Host "aria2c found; downloading with parallel connections..."
+            $targetDir = Split-Path -Path $targetIso -Parent
+            $targetName = Split-Path -Path $targetIso -Leaf
+
+            $ariaArgs = @(
+                '--max-connection-per-server=16',
+                '--split=16',
+                '--min-split-size=1M',
+                '--max-tries=5',
+                '--retry-wait=5',
+                '--continue=true',
+                '--file-allocation=none',
+                "--dir=$targetDir",
+                "--out=$targetName",
+                $Source
+            )
+
+            # Run aria2c and check result
+            & aria2c @ariaArgs
+            if (-not (Test-Path -Path $targetIso -PathType Leaf)) {
+                throw "aria2c failed to download the ISO to '$targetIso'."
+            }
+        }
+        else {
+            Write-Host "aria2c not found; falling back to Invoke-WebRequest..."
+            Invoke-WebRequest -Uri $Source -OutFile $targetIso
+        }
+
         return $targetIso
     }
 
