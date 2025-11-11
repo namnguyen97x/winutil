@@ -67,7 +67,10 @@ function Invoke-Microwin {
     }
 
     # Define the constants for Windows API
-Add-Type @"
+    # Prevent the machine from sleeping during the build process
+    try {
+        if (-not ([System.Management.Automation.PSTypeName]'PowerManagement').Type) {
+            Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 
@@ -83,9 +86,13 @@ public class PowerManagement {
     }
 }
 "@
-
-    # Prevent the machine from sleeping
-    [PowerManagement]::SetThreadExecutionState([PowerManagement]::EXECUTION_STATE::ES_CONTINUOUS -bor [PowerManagement]::EXECUTION_STATE::ES_SYSTEM_REQUIRED -bor [PowerManagement]::EXECUTION_STATE::ES_DISPLAY_REQUIRED)
+        }
+        # Prevent the machine from sleeping
+        [PowerManagement]::SetThreadExecutionState([PowerManagement]::EXECUTION_STATE::ES_CONTINUOUS -bor [PowerManagement]::EXECUTION_STATE::ES_SYSTEM_REQUIRED -bor [PowerManagement]::EXECUTION_STATE::ES_DISPLAY_REQUIRED) | Out-Null
+    }
+    catch {
+        Write-Warning "Failed to set execution state (machine may sleep during build): $($_.Exception.Message)"
+    }
 
     # Ask the user where to save the file
     if ($headless) {
