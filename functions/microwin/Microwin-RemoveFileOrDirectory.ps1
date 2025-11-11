@@ -19,9 +19,11 @@ function Microwin-RemoveFileOrDirectory([string]$pathToDelete, [string]$mask = "
         }
     }
 
+    $counter = 0
     foreach($itemToDelete in $itemsToDelete) {
+        $counter++
         $status = "Deleting $($itemToDelete)"
-        Write-Progress -Activity "Removing Items" -Status $status -PercentComplete ($counter++/$itemsToDelete.Count*100)
+        Write-Progress -Activity "Removing Items" -Status $status -PercentComplete ($counter/$itemsToDelete.Count*100)
 
         if (Test-Path -Path "$($itemToDelete)" -PathType Container) {
             $status = "Deleting directory: $($itemToDelete)"
