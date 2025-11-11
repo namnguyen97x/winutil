@@ -169,11 +169,47 @@ function Get-LocalIsoPath {
     return $resolved
 }
 
+function Expand-IsoWithSevenZip {
+    param(
+        [Parameter(Mandatory)]
+        [string]$IsoPath,
+
+        [Parameter(Mandatory)]
+        [string]$Destination
+    )
+
+    $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
+    if (-not $sevenZip) {
+        throw "7z.exe was not found on PATH. Install 7-Zip to enable ISO extraction without mounting."
+    }
+
+    if (-not (Test-Path -Path $IsoPath -PathType Leaf)) {
+        throw "ISO path '$IsoPath' does not exist."
+    }
+
+    if (-not (Test-Path -Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    }
+
+    $extractArgs = @(
+        'x',
+        '-y',
+        "-o`"$Destination`"",
+        $IsoPath
+    )
+
+    Write-Host "Extracting ISO with 7z.exe because Mount-DiskImage is unavailable..."
+    & $sevenZip.Path @extractArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "7z.exe failed with exit code $LASTEXITCODE while extracting '$IsoPath'."
+    }
+}
+
 $isoPath = Get-LocalIsoPath -Source $IsoSource -DestinationFolder $downloadsDir
 
 $mountedImage = $null
 try {
-    Write-Host "Mounting ISO image..."
+    Write-Host "Mounting ISO image from $isoPath ..."
     $mountedImage = Mount-DiskImage -ImagePath $isoPath -PassThru
     $volume = $mountedImage | Get-Volume
     $driveLetter = $volume.DriveLetter
@@ -183,6 +219,18 @@ try {
 
     Write-Host "Copying files from $driveLetter`: to $mountDir ..."
     Copy-Files "$driveLetter`:" "$mountDir" -Recurse -Force
+}
+catch {
+    $mountFailure = $_
+    Write-Warning "Mount-DiskImage failed (`$($mountFailure.Exception.Message)`). Falling back to extracting the ISO with 7-Zip."
+    try {
+        Expand-IsoWithSevenZip -IsoPath $isoPath -Destination $mountDir
+        Write-Host "ISO contents extracted to $mountDir using 7z.exe."
+    }
+    catch {
+        $fallbackFailure = $_
+        throw "Mount-DiskImage failed (`$($mountFailure.Exception.Message)`) and extracting the ISO with 7z.exe also failed (`$($fallbackFailure.Exception.Message)`)."
+    }
 }
 finally {
     if ($mountedImage) {
