@@ -13,9 +13,9 @@ function Microwin-RemoveFileOrDirectory([string]$pathToDelete, [string]$mask = "
     } else {
         Write-Debug "Adding $($pathToDelete) to array and mask is $($mask)"
         if ($Directory) {
-            $itemsToDelete = Get-ChildItem $pathToDelete -Include $mask -Recurse -Directory
+            $itemsToDelete = @(Get-ChildItem $pathToDelete -Include $mask -Recurse -Directory)
         } else {
-            $itemsToDelete = Get-ChildItem $pathToDelete -Include $mask -Recurse
+            $itemsToDelete = @(Get-ChildItem $pathToDelete -Include $mask -Recurse)
         }
     }
 

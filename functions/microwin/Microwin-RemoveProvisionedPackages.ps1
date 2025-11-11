@@ -18,7 +18,7 @@ function Microwin-RemoveProvisionedPackages() {
     try
     {
         if ($UseCmdlets) {
-            $appxProvisionedPackages = Get-AppxProvisionedPackage -Path "$($scratchDir)" | Where-Object {
+            $appxProvisionedPackages = @(Get-AppxProvisionedPackage -Path "$($scratchDir)" | Where-Object {
                     $_.PackageName -NotLike "*AppInstaller*" -AND
                     $_.PackageName -NotLike "*Store*" -and
                     $_.PackageName -NotLike "*Notepad*" -and
@@ -34,13 +34,13 @@ function Microwin-RemoveProvisionedPackages() {
                     $_.PackageName -NotLike "*Extension*" -and
                     $_.PackageName -NotLike "*SecHealthUI*" -and
                     $_.PackageName -NotLike "*ScreenSketch*"
-            }
+            })
         } else {
             $appxProvisionedPackages = dism /english /image="$scratchDir" /get-provisionedappxpackages | Select-String -Pattern "PackageName : " -CaseSensitive -SimpleMatch
             if ($?) {
                 $appxProvisionedPackages = $appxProvisionedPackages -split "PackageName : " | Where-Object {$_}
                 # Exclude the same items.
-                $appxProvisionedPackages = $appxProvisionedPackages | Where-Object {
+                $appxProvisionedPackages = @($appxProvisionedPackages | Where-Object {
                     $_ -NotLike "*AppInstaller*" -AND
                     $_ -NotLike "*Store*" -and
                     $_ -NotLike "*Notepad*" -and
@@ -56,7 +56,7 @@ function Microwin-RemoveProvisionedPackages() {
                     $_ -NotLike "*Extension*" -and
                     $_ -NotLike "*SecHealthUI*" -and
                     $_ -NotLike "*ScreenSketch*"
-                }
+                })
             } else {
                 Write-Host "AppX packages could not be obtained with DISM. MicroWin processing will continue, but AppX packages will be skipped."
                 return

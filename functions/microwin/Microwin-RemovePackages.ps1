@@ -19,7 +19,7 @@ function Microwin-RemovePackages {
         if ($useCmdlets) {
             $pkglist = (Get-WindowsPackage -Path "$scratchDir").PackageName
 
-            $pkglist = $pkglist | Where-Object {
+            $pkglist = @($pkglist | Where-Object {
                     $_ -NotLike "*ApplicationModel*" -AND
                     $_ -NotLike "*indows-Client-LanguagePack*" -AND
                     $_ -NotLike "*LanguageFeatures-Basic*" -AND
@@ -37,13 +37,13 @@ function Microwin-RemovePackages {
                     $_ -NotLike "*Hello-Face*" -AND
                     $_ -NotLike "*ISE*" -AND
                     $_ -NotLike "*OpenSSH*"
-                }
+                })
         } else {
             $pkgList = dism /english /image="$scratchDir" /get-packages | Select-String -Pattern "Package Identity : " -CaseSensitive -SimpleMatch
             if ($?) {
                 $pkgList = $pkgList -split "Package Identity : " | Where-Object {$_}
                 # Exclude the same items.
-                $pkgList = $pkgList | Where-Object {
+                $pkgList = @($pkgList | Where-Object {
                     $_ -NotLike "*ApplicationModel*" -AND
                     $_ -NotLike "*indows-Client-LanguagePack*" -AND
                     $_ -NotLike "*LanguageFeatures-Basic*" -AND
@@ -61,7 +61,7 @@ function Microwin-RemovePackages {
                     $_ -NotLike "*Hello-Face*" -AND
                     $_ -NotLike "*ISE*" -AND
                     $_ -NotLike "*OpenSSH*"
-                }
+                })
             } else {
                 Write-Host "Packages could not be obtained with DISM. MicroWin processing will continue, but packages will be skipped."
                 return

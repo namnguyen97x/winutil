@@ -19,7 +19,7 @@ function Microwin-RemoveFeatures() {
         if ($UseCmdlets) {
             $featlist = (Get-WindowsOptionalFeature -Path "$scratchDir")
 
-            $featlist = $featlist | Where-Object {
+            $featlist = @($featlist | Where-Object {
                 $_.FeatureName -NotLike "*Defender*" -AND
                 $_.FeatureName -NotLike "*Printing*" -AND
                 $_.FeatureName -NotLike "*TelnetClient*" -AND
@@ -30,14 +30,14 @@ function Microwin-RemoveFeatures() {
                 $_.FeatureName -NotLike "*SearchEngine*" -AND
                 $_.FeatureName -NotLike "*RemoteDesktop*" -AND
                 $_.State -ne "Disabled"
-            }
+            })
         } else {
             $featList = dism /english /image="$scratchDir" /get-features | Select-String -Pattern "Feature Name : " -CaseSensitive -SimpleMatch
             if ($?) {
                 $featList = $featList -split "Feature Name : " | Where-Object {$_}
                 # Exclude the same items. Note: for now, this doesn't exclude those features that are disabled.
                 # This will appear in the future
-                $featList = $featList | Where-Object {
+                $featList = @($featList | Where-Object {
                     $_ -NotLike "*Defender*" -AND
                     $_ -NotLike "*Printing*" -AND
                     $_ -NotLike "*TelnetClient*" -AND
@@ -47,7 +47,7 @@ function Microwin-RemoveFeatures() {
                     $_ -NotLike "*NFS*" -AND
                     $_ -NotLike "*SearchEngine*" -AND
                     $_ -NotLike "*RemoteDesktop*"
-                }
+                })
             } else {
                 Write-Host "Features could not be obtained with DISM. MicroWin processing will continue, but features will be skipped."
                 return
