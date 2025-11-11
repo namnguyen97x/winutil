@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Ensure aria2 is available
-        shell: pwsh
+        shell: powershell
         run: |
           # Install aria2 on the runner so the build script can use aria2c for fast downloads.
           # Chocolatey is available on GitHub Windows runners. Installing is idempotent.
@@ -40,7 +40,7 @@ jobs:
           aria2c --version
 
       - name: Build MicroWin ISO
-        shell: pwsh
+        shell: powershell
         run: |
           $params = @{
             IsoSource = '${{ github.event.inputs.iso_url }}'
