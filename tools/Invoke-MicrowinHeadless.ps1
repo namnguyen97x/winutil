@@ -148,18 +148,21 @@ function Get-LocalIsoPath {
                 $Source
             )
 
-            # Run aria2c and check result
-            & aria2c @ariaArgs
+            # Run aria2c and redirect output to suppress verbose logging in the console
+            Write-Host "Starting download..."
+            & aria2c @ariaArgs *> $null
             if (-not (Test-Path -Path $targetIso -PathType Leaf)) {
                 throw "aria2c failed to download the ISO to '$targetIso'."
             }
+            Write-Host "Download completed successfully: $targetIso"
         }
         else {
             Write-Host "aria2c not found; falling back to Invoke-WebRequest..."
             Invoke-WebRequest -Uri $Source -OutFile $targetIso
         }
 
-        return $targetIso
+        $resolvedPath = [System.IO.Path]::GetFullPath($targetIso)
+        return $resolvedPath
     }
 
     $resolved = [System.IO.Path]::GetFullPath($Source)
