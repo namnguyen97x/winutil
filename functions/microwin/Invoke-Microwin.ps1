@@ -3,11 +3,66 @@ function Invoke-Microwin {
         .DESCRIPTION
         Invoke MicroWin routines...
     #>
+    param(
+        [psobject]$MicrowinOptions
+    )
 
+    $headless = $MicrowinOptions -ne $null
 
-    if($sync.ProcessRunning) {
+    $busyInfo = {
+        param(
+            [string]$Action,
+            [string]$Message,
+            [bool]$Interactive = $false
+        )
+
+        if ($headless) {
+            if ($Action -eq "warning") {
+                Write-Warning $Message
+            } else {
+                Write-Host $Message
+            }
+        } else {
+            Invoke-MicrowinBusyInfo -action $Action -message $Message -interactive $Interactive
+        }
+    }
+
+    $showDialog = {
+        param(
+            [string]$Message,
+            [System.Windows.MessageBoxImage]$ImageType
+        )
+
+        if ($headless) {
+            switch ($ImageType) {
+                ([System.Windows.MessageBoxImage]::Error) { Write-Error $Message }
+                ([System.Windows.MessageBoxImage]::Warning) { Write-Warning $Message }
+                ([System.Windows.MessageBoxImage]::Exclamation) { Write-Warning $Message }
+                default { Write-Host $Message }
+            }
+        } else {
+            [System.Windows.MessageBox]::Show($Message, "Winutil", [System.Windows.MessageBoxButton]::OK, $ImageType) | Out-Null
+        }
+    }
+
+    $updateTaskbar = {
+        param(
+            [string]$State,
+            [Nullable[int]]$Value,
+            [string]$Overlay
+        )
+
+        if (-not $headless) {
+            $params = @{ state = $State }
+            if ($null -ne $Value) { $params.value = $Value }
+            if ($null -ne $Overlay) { $params.overlay = $Overlay }
+            Set-WinUtilTaskbaritem @params
+        }
+    }
+
+    if ((-not $headless) -and $null -ne $sync -and $sync.ProcessRunning) {
         $msg = "GetIso process is currently running."
-        [System.Windows.MessageBox]::Show($msg, "Winutil", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+        &$showDialog $msg ([System.Windows.MessageBoxImage]::Warning)
         return
     }
 
@@ -33,39 +88,86 @@ public class PowerManagement {
     [PowerManagement]::SetThreadExecutionState([PowerManagement]::EXECUTION_STATE::ES_CONTINUOUS -bor [PowerManagement]::EXECUTION_STATE::ES_SYSTEM_REQUIRED -bor [PowerManagement]::EXECUTION_STATE::ES_DISPLAY_REQUIRED)
 
     # Ask the user where to save the file
-    $SaveDialog = New-Object System.Windows.Forms.SaveFileDialog
-    $SaveDialog.InitialDirectory = [Environment]::GetFolderPath('Desktop')
-    $SaveDialog.Filter = "ISO images (*.iso)|*.iso"
-    $SaveDialog.ShowDialog() | Out-Null
+    if ($headless) {
+        if ([string]::IsNullOrWhiteSpace($MicrowinOptions.OutputIsoPath)) {
+            throw "MicrowinOptions.OutputIsoPath is required when running headless."
+        }
+        $resolvedOutput = [System.IO.Path]::GetFullPath($MicrowinOptions.OutputIsoPath)
+        $outputDirectory = Split-Path -Path $resolvedOutput -Parent
+        if ($outputDirectory -and -not (Test-Path -Path $outputDirectory)) {
+            New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+        }
+        $SaveDialog = [pscustomobject]@{
+            FileName = $resolvedOutput
+        }
+    } else {
+        $SaveDialog = New-Object System.Windows.Forms.SaveFileDialog
+        $SaveDialog.InitialDirectory = [Environment]::GetFolderPath('Desktop')
+        $SaveDialog.Filter = "ISO images (*.iso)|*.iso"
+        $SaveDialog.ShowDialog() | Out-Null
+    }
 
-    if ($SaveDialog.FileName -eq "") {
+    if ([string]::IsNullOrWhiteSpace($SaveDialog.FileName)) {
         $msg = "No file name for the target image was specified"
         Write-Host $msg
-        Invoke-MicrowinBusyInfo -action "warning" -message $msg
-        Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
+        &$busyInfo -Action "warning" -Message $msg
+        &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
         return
     }
 
-    Set-WinUtilTaskbaritem -state "Indeterminate" -overlay "logo"
-    Invoke-MicrowinBusyInfo -action "wip" -message "Busy..." -interactive $false
+    &$updateTaskbar -State "Indeterminate" -Overlay "logo"
+    &$busyInfo -Action "wip" -Message "Busy..." -Interactive $false
 
     Write-Host "Target ISO location: $($SaveDialog.FileName)"
 
-    $index = $sync.MicrowinWindowsFlavors.SelectedValue.Split(":")[0].Trim()
-    Write-Host "Index chosen: '$index' from $($sync.MicrowinWindowsFlavors.SelectedValue)"
+    if ($headless) {
+        if (-not $MicrowinOptions.ImageIndex) {
+            throw "MicrowinOptions.ImageIndex is required when running headless."
+        }
+        $index = [int]$MicrowinOptions.ImageIndex
+        if ($MicrowinOptions.PSObject.Properties.Name -contains "ImageName" -and $MicrowinOptions.ImageName) {
+            Write-Host "Index chosen: '$index' from $($MicrowinOptions.ImageName)"
+        } else {
+            Write-Host "Index chosen: '$index'"
+        }
+    } else {
+        $index = $sync.MicrowinWindowsFlavors.SelectedValue.Split(":")[0].Trim()
+        Write-Host "Index chosen: '$index' from $($sync.MicrowinWindowsFlavors.SelectedValue)"
+    }
 
-    $copyToUSB = $sync.WPFMicrowinCopyToUsb.IsChecked
-    $injectDrivers = $sync.MicrowinInjectDrivers.IsChecked
-    $importDrivers = $sync.MicrowinImportDrivers.IsChecked
+    if ($headless) {
+        $copyToUSB = [bool]$MicrowinOptions.CopyToUSB
+        $injectDrivers = [bool]$MicrowinOptions.InjectDrivers
+        $importDrivers = [bool]$MicrowinOptions.ImportDrivers
+        $WPBT = [bool]$MicrowinOptions.DisableWPBT
+        $unsupported = [bool]$MicrowinOptions.AllowUnsupportedHardware
+        $skipFla = [bool]$MicrowinOptions.SkipFirstLogonAnimation
+        $importVirtIO = [bool]$MicrowinOptions.CopyVirtIO
+        $mountDir = $MicrowinOptions.MountDir
+        $scratchDir = $MicrowinOptions.ScratchDir
+        if ([string]::IsNullOrWhiteSpace($mountDir) -or [string]::IsNullOrWhiteSpace($scratchDir)) {
+            throw "MicrowinOptions must include both MountDir and ScratchDir."
+        }
+    } else {
+        $copyToUSB = $sync.WPFMicrowinCopyToUsb.IsChecked
+        $injectDrivers = $sync.MicrowinInjectDrivers.IsChecked
+        $importDrivers = $sync.MicrowinImportDrivers.IsChecked
 
-    $WPBT = $sync.MicroWinWPBT.IsChecked
-    $unsupported = $sync.MicroWinUnsupported.IsChecked
-    $skipFla = $sync.MicroWinNoFLA.IsChecked
+        $WPBT = $sync.MicroWinWPBT.IsChecked
+        $unsupported = $sync.MicroWinUnsupported.IsChecked
+        $skipFla = $sync.MicroWinNoFLA.IsChecked
 
-    $importVirtIO = $sync.MicrowinCopyVirtIO.IsChecked
+        $importVirtIO = $sync.MicrowinCopyVirtIO.IsChecked
 
-    $mountDir = $sync.MicrowinMountDir.Text
-    $scratchDir = $sync.MicrowinScratchDir.Text
+        $mountDir = $sync.MicrowinMountDir.Text
+        $scratchDir = $sync.MicrowinScratchDir.Text
+    }
+
+    $driverPath = if ($headless) { $MicrowinOptions.DriverPath } else { $sync.MicrowinDriverLocation.Text }
+    $autoConfigPath = if ($headless) { $MicrowinOptions.AutoConfigPath } else { $sync.MicrowinAutoConfigBox.Text }
+    $userName = if ($headless) { $MicrowinOptions.UserName } else { $sync.MicrowinUserName.Text }
+    $userPassword = if ($headless) { $MicrowinOptions.UserPassword } else { $sync.MicrowinUserPassword.Password }
+    $useEsd = if ($headless) { [bool]$MicrowinOptions.UseEsd } else { $sync.MicroWinESD.IsChecked }
 
     # Detect if the Windows image is an ESD file and convert it to WIM
     if (-not (Test-Path -Path "$mountDir\sources\install.wim" -PathType Leaf) -and (Test-Path -Path "$mountDir\sources\install.esd" -PathType Leaf)) {
@@ -83,9 +185,9 @@ public class PowerManagement {
         } else {
             $msg = "The export process has failed and MicroWin processing cannot continue"
             Write-Host $msg
-            Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
-            Invoke-MicrowinBusyInfo -action "warning" -message $msg
-            [System.Windows.MessageBox]::Show($msg, "Winutil", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
+            &$busyInfo -Action "warning" -Message $msg
+            &$showDialog $msg ([System.Windows.MessageBoxImage]::Error)
             return
         }
     }
@@ -98,9 +200,9 @@ public class PowerManagement {
         $msg = "This image is not compatible with MicroWin processing. Make sure it isn't a Windows 8 or earlier image."
         $dlg_msg = $msg + "`n`nIf you want more information, the version of the image selected is $($imgVersion)`n`nIf an image has been incorrectly marked as incompatible, report an issue to the developers."
         Write-Host $msg
-        [System.Windows.MessageBox]::Show($dlg_msg, "Winutil", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Exclamation)
-        Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
-        Invoke-MicrowinBusyInfo -action "warning" -message $msg
+        &$showDialog $dlg_msg ([System.Windows.MessageBoxImage]::Exclamation)
+        &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
+        &$busyInfo -Action "warning" -Message $msg
         return
     }
 
@@ -109,7 +211,7 @@ public class PowerManagement {
         $msg = "Windows 10 has been detected in the image you want to process. While you can continue, Windows 10 is not a recommended target for MicroWin, and you may not get the full experience."
         $dlg_msg = $msg
         Write-Host $msg
-        [System.Windows.MessageBox]::Show($dlg_msg, "Winutil", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Exclamation)
+        &$showDialog $dlg_msg ([System.Windows.MessageBoxImage]::Exclamation)
     }
 
     $mountDirExists = Test-Path $mountDir
@@ -117,8 +219,8 @@ public class PowerManagement {
     if (-not $mountDirExists -or -not $scratchDirExists) {
         $msg = "Required directories '$mountDirExists' '$scratchDirExists' and do not exist."
         Write-Error $msg
-        Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
-        Invoke-MicrowinBusyInfo -action "warning" -message $msg
+        &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
+        &$busyInfo -Action "warning" -Message $msg
         return
     }
 
@@ -131,8 +233,8 @@ public class PowerManagement {
         } else {
             $msg = "Could not mount image. Exiting..."
             Write-Host $msg
-            Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
-            Invoke-MicrowinBusyInfo -action "warning" -message $msg
+            &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
+            &$busyInfo -Action "warning" -Message $msg
             return
         }
 
@@ -141,9 +243,9 @@ public class PowerManagement {
             if (Test-Path "$env:TEMP\DRV_EXPORT") {
                 Remove-Item "$env:TEMP\DRV_EXPORT" -Recurse -Force
             }
-            if (($injectDrivers -and (Test-Path "$($sync.MicrowinDriverLocation.Text)"))) {
+            if ($injectDrivers -and (Test-Path "$driverPath")) {
                 Write-Host "Using specified driver source..."
-                dism /english /online /export-driver /destination="$($sync.MicrowinDriverLocation.Text)" | Out-Host
+                dism /english /online /export-driver /destination="$driverPath" | Out-Host
                 if ($?) {
                     # Don't add exported drivers yet, that is run later
                     Write-Host "Drivers have been exported successfully."
@@ -166,7 +268,6 @@ public class PowerManagement {
         }
 
         if ($injectDrivers) {
-            $driverPath = $sync.MicrowinDriverLocation.Text
             if (Test-Path $driverPath) {
                 Write-Host "Adding Windows Drivers image($scratchDir) drivers($driverPath) "
                 dism /English /image:$scratchDir /add-driver /driver:$driverPath /recurse | Out-Host
@@ -258,12 +359,12 @@ public class PowerManagement {
 
         Write-Host "Create unattend.xml"
 
-        if (($sync.MicrowinAutoConfigBox.Text -ne "") -and (Test-Path "$($sync.MicrowinAutoConfigBox.Text)"))
+        if ((-not [string]::IsNullOrWhiteSpace($autoConfigPath)) -and (Test-Path "$autoConfigPath"))
         {
             try
             {
                 Write-Host "A configuration file has been specified. Copying to WIM file..."
-                Copy-Item "$($sync.MicrowinAutoConfigBox.Text)" "$($scratchDir)\winutil-config.json"
+                Copy-Item "$autoConfigPath" "$($scratchDir)\winutil-config.json"
             }
             catch
             {
@@ -272,20 +373,11 @@ public class PowerManagement {
         }
 
         # Create unattended answer file with user information - Check condition to learn more about this functionality
-        if ($sync.MicrowinUserName.Text -eq "")
-        {
-            Microwin-NewUnattend -userName "User"
-        }
-        else
-        {
-            if ($sync.MicrowinUserPassword.Password -eq "")
-            {
-                Microwin-NewUnattend -userName "$($sync.MicrowinUserName.Text)"
-            }
-            else
-            {
-                Microwin-NewUnattend -userName "$($sync.MicrowinUserName.Text)" -userPassword "$($sync.MicrowinUserPassword.Password)"
-            }
+        $resolvedUserName = if ([string]::IsNullOrWhiteSpace($userName)) { "User" } else { $userName }
+        if ([string]::IsNullOrWhiteSpace($userPassword)) {
+            Microwin-NewUnattend -userName "$resolvedUserName"
+        } else {
+            Microwin-NewUnattend -userName "$resolvedUserName" -userPassword "$userPassword"
         }
         Write-Host "Done Create unattend.xml"
         Write-Host "Copy unattend.xml file into the ISO"
@@ -427,14 +519,13 @@ public class PowerManagement {
         if (-not (Test-Path -Path "$mountDir\sources\install.wim")) {
             $msg = "Something went wrong. Please report this bug to the devs."
             Write-Error "$($msg) '$($mountDir)\sources\install.wim' doesn't exist"
-            Invoke-MicrowinBusyInfo -action "warning" -message $msg
-            Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
+            &$busyInfo -Action "warning" -Message $msg
+            &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
             return
         }
         Write-Host "Windows image completed. Continuing with boot.wim."
 
-        $esd = $sync.MicroWinESD.IsChecked
-        if ($esd) {
+        if ($useEsd) {
             Write-Host "Converting install image to ESD."
             try {
                 Export-WindowsImage -SourceImagePath "$mountDir\sources\install.wim" -SourceIndex $index -DestinationImagePath "$mountDir\sources\install.esd" -CompressionType "Recovery"
@@ -452,7 +543,6 @@ public class PowerManagement {
         Mount-WindowsImage -ImagePath "$mountDir\sources\boot.wim" -Index 2 -Path "$scratchDir"
 
         if ($injectDrivers) {
-            $driverPath = $sync.MicrowinDriverLocation.Text
             if (Test-Path $driverPath) {
                 Write-Host "Adding Windows Drivers image($scratchDir) drivers($driverPath) "
                 dism /English /image:$scratchDir /add-driver /driver:$driverPath /recurse | Out-Host
@@ -531,9 +621,9 @@ public class PowerManagement {
                 Remove-Item -Recurse -Force "$($mountDir)"
             $msg = "Done. ISO image is located here: $($SaveDialog.FileName)"
             Write-Host $msg
-            Set-WinUtilTaskbaritem -state "None" -overlay "checkmark"
-            Invoke-MicrowinBusyInfo -action "done" -message "Finished!"
-            [System.Windows.MessageBox]::Show($msg, "Winutil", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+            &$updateTaskbar -State "None" -Overlay "checkmark"
+            &$busyInfo -Action "done" -Message "Finished!"
+            &$showDialog $msg ([System.Windows.MessageBoxImage]::Information)
         } else {
             Write-Host "ISO creation failed. The "$($mountDir)" directory has not been removed."
             try {
@@ -541,19 +631,24 @@ public class PowerManagement {
                 # Now, this will NOT throw an exception
                 $exitCode = New-Object System.ComponentModel.Win32Exception($LASTEXITCODE)
                 Write-Host "Reason: $($exitCode.Message)"
-                Invoke-MicrowinBusyInfo -action "warning" -message $exitCode.Message
-                Set-WinUtilTaskbaritem -state "Error" -value 1 -overlay "warning"
-                [System.Windows.MessageBox]::Show("MicroWin failed to make the ISO.", "Winutil", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                &$busyInfo -Action "warning" -Message $exitCode.Message
+                &$updateTaskbar -State "Error" -Value 1 -Overlay "warning"
+                &$showDialog "MicroWin failed to make the ISO." ([System.Windows.MessageBoxImage]::Error)
             } catch {
                 # Could not get error description from Windows APIs
             }
         }
 
-        Toggle-MicrowinPanel 1
+        if (-not $headless) {
+            Toggle-MicrowinPanel 1
+        }
 
-        $sync.MicrowinFinalIsoLocation.Text = "$($SaveDialog.FileName)"
+        if (-not $headless -and $null -ne $sync) {
+            $sync.MicrowinFinalIsoLocation.Text = "$($SaveDialog.FileName)"
+            $sync.ProcessRunning = $false
+        }
+
         # Allow the machine to sleep again (optional)
         [PowerManagement]::SetThreadExecutionState(0)
-        $sync.ProcessRunning = $false
     }
 }

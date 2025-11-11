@@ -1,0 +1,60 @@
+name: microwin-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      iso_url:
+        description: Direct download URL for the Windows ISO to customize
+        required: true
+      image_index:
+        description: Optional Windows image index (overrides edition selection)
+        required: false
+      preferred_edition:
+        description: Edition name to prefer when selecting an image index
+        required: false
+        default: Professional
+      allow_unsupported:
+        description: Bypass Windows 11 hardware checks in the ISO
+        required: false
+        default: "true"
+      skip_fla:
+        description: Skip the first logon animation
+        required: false
+        default: "true"
+      use_esd:
+        description: Convert the final image to ESD to reduce the ISO size
+        required: false
+        default: "false"
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build MicroWin ISO
+        shell: pwsh
+        run: |
+          $params = @{
+            IsoSource = '${{ github.event.inputs.iso_url }}'
+            OutputPath = (Join-Path $env:GITHUB_WORKSPACE 'artifacts\microwin.iso')
+            WorkingDirectory = (Join-Path $env:GITHUB_WORKSPACE 'microwin-workdir')
+            PreferredEdition = '${{ github.event.inputs.preferred_edition }}'
+            AllowUnsupportedHardware = [System.Convert]::ToBoolean('${{ github.event.inputs.allow_unsupported }}')
+            SkipFirstLogonAnimation = [System.Convert]::ToBoolean('${{ github.event.inputs.skip_fla }}')
+            UseEsd = [System.Convert]::ToBoolean('${{ github.event.inputs.use_esd }}')
+          }
+
+          if ('${{ github.event.inputs.image_index }}') {
+            $params.ImageIndex = [int]'${{ github.event.inputs.image_index }}'
+          }
+
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'tools\Invoke-MicrowinHeadless.ps1'
+          & $scriptPath @params
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: microwin-iso
+          path: artifacts/microwin.iso

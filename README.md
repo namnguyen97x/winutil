@@ -71,6 +71,27 @@ You'll see a new file named `winutil.ps1`, which's created by `Compile.ps1` scri
 > [!TIP]
 > For more info on using WinUtil and how to develop for it, please consider reading [the Contribution Guidelines](https://winutil.christitus.com/contributing/), if you don't know where to start, or have questions, you can ask over on our [Discord Community Server](https://discord.gg/RUbZUZyByQ) and active project members will answer when they can.
 
+### Automated MicroWin builds (GitHub runner friendly)
+
+If you need to generate a MicroWin ISO without the WPF interface you can now use `tools/Invoke-MicrowinHeadless.ps1`.  
+The headless builder accepts a direct ISO URL or a local path, processes it, and writes the customized ISO to any path you choose. Example:
+
+```ps1
+pwsh -ExecutionPolicy Bypass -File tools\Invoke-MicrowinHeadless.ps1 `
+    -IsoSource "https://software-download.microsoft.com/db/Win11_24H2_English_x64.iso" `
+    -OutputPath "$PWD\artifacts\microwin.iso" `
+    -WorkingDirectory "$PWD\microwin-workdir" `
+    -PreferredEdition "Professional" `
+    -AllowUnsupportedHardware:$true `
+    -SkipFirstLogonAnimation:$true
+```
+
+- `-ImageIndex` (optional) overrides edition auto-detection.
+- Provide `-DriverPath` and `-InjectDrivers:$true` if you want to slipstream your own drivers.
+- Set `-UseEsd:$true` to produce a smaller `install.esd`.
+
+For CI/CD, a new workflow named **microwin-build** lives under `.github/workflows/microwin-build.yaml`. Trigger it from the Actions tab, paste the ISO download link, and GitHub will run the headless builder on a Windows runner and publish the resulting ISO as an artifact named `microwin-iso`.
+
 ## 💖 Support
 - To morally and mentally support the project, make sure to leave a ⭐️!
 - EXE Wrapper for $10 @ https://www.cttstore.com/windows-toolbox
