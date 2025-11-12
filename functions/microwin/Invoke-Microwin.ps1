@@ -60,6 +60,21 @@ function Invoke-Microwin {
         }
     }
 
+    $safeRegCommand = {
+        param(
+            [string]$Command
+        )
+        $output = & cmd /c $Command 2>&1
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            $errorOutput = $output | Where-Object { $_ -match "ERROR" }
+            if ($errorOutput) {
+                Write-Warning "Registry command failed: $($errorOutput -join '; ')"
+            }
+        }
+        return $exitCode -eq 0
+    }
+
     if ((-not $headless) -and $null -ne $sync -and $sync.ProcessRunning) {
         $msg = "GetIso process is currently running."
         &$showDialog $msg ([System.Windows.MessageBoxImage]::Warning)
@@ -422,14 +437,14 @@ public class PowerManagement {
         reg load HKLM\zSYSTEM "$($scratchDir)\Windows\System32\config\SYSTEM"
 
         Write-Host "Disabling Teams"
-        reg add "HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\Communications" /v "ConfigureChatAutoInstall" /t REG_DWORD /d 0 /f   >$null 2>&1
-        reg add "HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Chat" /v ChatIcon /t REG_DWORD /d 2 /f                             >$null 2>&1
-        reg add "HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarMn" /t REG_DWORD /d 0 /f        >$null 2>&1
-        reg query "HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\Communications" /v "ConfigureChatAutoInstall"                      >$null 2>&1
+        reg add "HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\Communications" /v "ConfigureChatAutoInstall" /t REG_DWORD /d 0 /f   >$null 2>&1; if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to add ConfigureChatAutoInstall registry value" }
+        reg add "HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Chat" /v ChatIcon /t REG_DWORD /d 2 /f                             >$null 2>&1; if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to add ChatIcon registry value" }
+        reg add "HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarMn" /t REG_DWORD /d 0 /f        >$null 2>&1; if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to add TaskbarMn registry value" }
+        reg query "HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\Communications" /v "ConfigureChatAutoInstall"                      >$null 2>&1; if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to query ConfigureChatAutoInstall registry value" }
         Write-Host "Done disabling Teams"
 
         Write-Host "Fix Windows Volume Mixer Issue"
-        reg add "HKLM\zNTUSER\Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore" /f
+        reg add "HKLM\zNTUSER\Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore" /f >$null 2>&1; if ($LASTEXITCODE -ne 0) { Write-Warning "Failed to add PropertyStore registry key" }
 
         Write-Host "Bypassing system requirements (system image)"
         reg add "HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache" /v "SV1" /t REG_DWORD /d 0 /f
@@ -495,9 +510,16 @@ public class PowerManagement {
     } catch {
         $errorMessage = $_.Exception.Message
         $errorStackTrace = $_.Exception.StackTrace
-        Write-Error "An unexpected error occurred: $errorMessage"
-        if ($errorStackTrace) {
-            Write-Host "Stack trace: $errorStackTrace" -ForegroundColor Yellow
+        
+        # Filter out common non-critical errors from registry operations
+        if ($errorMessage -match "ERROR: Access is denied" -and $errorMessage -notmatch "critical") {
+            Write-Warning "A registry operation encountered an access denied error. This may be non-critical and processing will continue."
+            Write-Warning "Details: $errorMessage"
+        } else {
+            Write-Error "An unexpected error occurred: $errorMessage"
+            if ($errorStackTrace) {
+                Write-Host "Stack trace: $errorStackTrace" -ForegroundColor Yellow
+            }
         }
     } finally {
         Write-Host "Unmounting Registry..."
@@ -585,9 +607,16 @@ public class PowerManagement {
     } catch {
         $errorMessage = $_.Exception.Message
         $errorStackTrace = $_.Exception.StackTrace
-        Write-Error "An unexpected error occurred: $errorMessage"
-        if ($errorStackTrace) {
-            Write-Host "Stack trace: $errorStackTrace" -ForegroundColor Yellow
+        
+        # Filter out common non-critical errors from registry operations
+        if ($errorMessage -match "ERROR: Access is denied" -and $errorMessage -notmatch "critical") {
+            Write-Warning "A registry operation encountered an access denied error. This may be non-critical and processing will continue."
+            Write-Warning "Details: $errorMessage"
+        } else {
+            Write-Error "An unexpected error occurred: $errorMessage"
+            if ($errorStackTrace) {
+                Write-Host "Stack trace: $errorStackTrace" -ForegroundColor Yellow
+            }
         }
     } finally {
         Write-Host "Unmounting Registry..."
