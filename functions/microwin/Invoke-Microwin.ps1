@@ -493,21 +493,26 @@ public class PowerManagement {
         }
 
     } catch {
-        Write-Error "An unexpected error occurred: $_"
+        $errorMessage = $_.Exception.Message
+        $errorStackTrace = $_.Exception.StackTrace
+        Write-Error "An unexpected error occurred: $errorMessage"
+        if ($errorStackTrace) {
+            Write-Host "Stack trace: $errorStackTrace" -ForegroundColor Yellow
+        }
     } finally {
         Write-Host "Unmounting Registry..."
-        reg unload HKLM\zCOMPONENTS
-        reg unload HKLM\zDEFAULT
-        reg unload HKLM\zNTUSER
-        reg unload HKLM\zSOFTWARE
-        reg unload HKLM\zSYSTEM
+        reg unload HKLM\zCOMPONENTS 2>&1 | Out-Null
+        reg unload HKLM\zDEFAULT 2>&1 | Out-Null
+        reg unload HKLM\zNTUSER 2>&1 | Out-Null
+        reg unload HKLM\zSOFTWARE 2>&1 | Out-Null
+        reg unload HKLM\zSYSTEM 2>&1 | Out-Null
 
         Write-Host "Cleaning up image..."
-        dism /English /image:$scratchDir /Cleanup-Image /StartComponentCleanup /ResetBase
+        dism /English /image:$scratchDir /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1 | Out-Null
         Write-Host "Cleanup complete."
 
         Write-Host "Unmounting image..."
-        Dismount-WindowsImage -Path "$scratchDir" -Save
+        Dismount-WindowsImage -Path "$scratchDir" -Save -ErrorAction SilentlyContinue
     }
 
     try {
@@ -578,17 +583,22 @@ public class PowerManagement {
         # Fix Computer Restarted Unexpectedly Error on New Bare Metal Install
         reg add "HKLM\zSYSTEM\Setup\Status\ChildCompletion" /v "setup.exe" /t REG_DWORD /d 3 /f
     } catch {
-        Write-Error "An unexpected error occurred: $_"
+        $errorMessage = $_.Exception.Message
+        $errorStackTrace = $_.Exception.StackTrace
+        Write-Error "An unexpected error occurred: $errorMessage"
+        if ($errorStackTrace) {
+            Write-Host "Stack trace: $errorStackTrace" -ForegroundColor Yellow
+        }
     } finally {
         Write-Host "Unmounting Registry..."
-        reg unload HKLM\zCOMPONENTS
-        reg unload HKLM\zDEFAULT
-        reg unload HKLM\zNTUSER
-        reg unload HKLM\zSOFTWARE
-        reg unload HKLM\zSYSTEM
+        reg unload HKLM\zCOMPONENTS 2>&1 | Out-Null
+        reg unload HKLM\zDEFAULT 2>&1 | Out-Null
+        reg unload HKLM\zNTUSER 2>&1 | Out-Null
+        reg unload HKLM\zSOFTWARE 2>&1 | Out-Null
+        reg unload HKLM\zSYSTEM 2>&1 | Out-Null
 
         Write-Host "Unmounting image..."
-        Dismount-WindowsImage -Path "$scratchDir" -Save
+        Dismount-WindowsImage -Path "$scratchDir" -Save -ErrorAction SilentlyContinue
 
         Write-Host "Creating ISO image"
 
