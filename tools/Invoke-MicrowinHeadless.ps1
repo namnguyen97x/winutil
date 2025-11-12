@@ -308,6 +308,12 @@ try {
 finally {
     if (-not $KeepWorkingDirectory -and (Test-Path -Path $workRoot)) {
         Write-Host "Cleaning up working directory..."
-        Remove-Item -Path $workRoot -Recurse -Force
+        try {
+            Remove-Item -Path $workRoot -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Warning "Failed to remove working directory '$workRoot'. Some files may still be in use."
+            Write-Warning "Details: $($_.Exception.Message)"
+        }
     }
 }
